@@ -62,7 +62,9 @@ GROUP BY position;
 /* Q5:Find the average number of strikeouts per game by decade since 1920. 
 Round the numbers you report to 2 decimal places. 
 Do the same for home runs per game. Do you see any trends?
-Answer:		*/
+Answer:	Strong correlation between avg strikeouts and homeruns,save the fact that 
+		homeruns took a sharp decrease in the last decade.
+		Both appear to generally increase in frequency over time*/
 WITH cte AS(
 SELECT CASE WHEN yearid BETWEEN 1920 AND 1929 THEN 1920
 	WHEN yearid BETWEEN 1930 AND 1939 THEN 1930
@@ -87,6 +89,37 @@ ROUND(AVG(total_strikeouts/total_games),2) AS avg_strikeouts_per_game,
 ROUND(AVG(total_hr/total_games),2) AS avg_hr_per_game
 FROM cte
 GROUP BY decade
-ORDER BY decade DESC
-
-
+ORDER BY decade DESC;
+/* Q6:Find the player who had the most success stealing bases in 2016, 
+	where success is measured as the percentage of stolen base attempts which are successful.
+	(A stolen base attempt results either in a stolen base or being caught stealing.) 
+	Consider only players who attempted at least 20 stolen bases.
+Answer:	Christoper Scott													*/
+WITH success_perc AS(
+	SELECT playerid,yearid,sb,cs,(sb-cs) AS stolen_success
+	FROM batting) 
+SELECT sp.playerid,namegiven,(stolen_success::float / sb::float)*100 AS perc_success
+FROM success_perc AS sp
+LEFT JOIN people AS p
+ON p.playerid = sp.playerid
+WHERE sb >= 20
+and YEARID = 2016
+	AND stolen_success IS NOT NULL
+ORDER BY (stolen_success::float / sb::float)*100  DESC;
+/* Q7:From 1970 – 2016, what is the largest number of wins for a team that did not win the world series?
+What is the smallest number of wins for a team that did win the world series? 
+Doing this will probably result in an unusually small number of wins for a world series champion –
+determine why this is the case. Then redo your query, excluding the problem year. 
+How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? 
+What percentage of the time?
+Answer:														*/
+WITH ref AS(
+	SELECT teamid,name,g,w,l,wswin,yearid
+	FROM teams
+	WHERE wswin = 'Y'
+		AND yearid BETWEEN 1970 AND 2016
+	ORDER BY yearid DESC)
+SELECT MAX(w) AS wins,name,yearid
+FROM ref
+GROUP BY name,yearid
+ORDER BY wins DESC;
