@@ -141,3 +141,49 @@ FROM(
 	INNER JOIN teams AS t 
 	ON t.yearid = nestsub.yearid AND t.w = nestsub.max_wins
 	WHERE t.yearid BETWEEN 1970 AND 2016) AS sub;
+
+/* Q8:Using the attendance figures from the homegames table, 
+find the teams and parks which had the top 5 average attendance per game in 2016 
+(where average attendance is defined as total attendance divided by number of games).
+Only consider parks where there were at least 10 games played. 
+Report the park name, team name, and average attendance. 
+Repeat for the lowest 5 average attendance.
+Answer:	
+TOP 5
+"LAN"	"Dodger Stadium"	45719
+"SLN"	"Busch Stadium III"	42524
+"TOR"	"Rogers Centre"		41877
+"SFN"	"AT&T Park"			41546
+"CHN"	"Wrigley Field"		39906
+
+BOTTOM 5
+"TBA"	"Tropicana Field"					15878
+"OAK"	"Oakland-Alameda County Coliseum"	18784
+"CLE"	"Progressive Field"					19650
+"MIA"	"Marlins Park"						21405
+"CHA"	"U.S. Cellular Field"				21559	*/
+														
+SELECT team,park_name,(attendance/games) AS avg_attendance  -- top stadiums
+FROM homegames AS hg
+LEFT JOIN parks AS p
+ON hg.park = p.park
+WHERE year = 2016
+	AND games >= 10
+ORDER BY attendance/games DESC
+LIMIT 5;
+
+SELECT team,park_name,(attendance/games) AS avg_attendance	   --bottom stadiums
+FROM homegames AS hg
+LEFT JOIN parks AS p
+ON hg.park = p.park
+WHERE year = 2016
+	AND games >= 10
+ORDER BY attendance/games 
+LIMIT 5;
+
+/* Q9:Which managers have won the TSN Manager of the Year award in both the National League (NL)
+and the American League (AL)? Give their full name and the teams that they were managing 
+when they won the award.
+Answer:												*/
+SELECT *
+FROM awardsmanagers
