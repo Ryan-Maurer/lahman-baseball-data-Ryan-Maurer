@@ -112,7 +112,11 @@ Doing this will probably result in an unusually small number of wins for a world
 determine why this is the case. Then redo your query, excluding the problem year. 
 How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? 
 What percentage of the time?
-Answer:														*/
+Answer:
+	7A:	114 Wins for the 1998 New York Yankees
+	7B: After exclusion of 1981 season due to player strike,
+		2006 St.Louis Cardinals won with 83 wins
+	7C:	between 1970 and 2016 12 (22.64%)teams who have had the most wins went on to win the world series															*/
 WITH ref AS(
 	SELECT teamid,name,g,w,l,wswin,yearid
 	FROM teams
@@ -122,4 +126,18 @@ WITH ref AS(
 SELECT MAX(w) AS wins,name,yearid
 FROM ref
 GROUP BY name,yearid
-ORDER BY wins DESC;
+ORDER BY wins ;
+
+--Q7 Second Part
+SELECT (SUM(is_wswin::float)/COUNT(*))* 100 AS perc
+FROM(
+	SELECT t.yearid,t.w,t.name,
+		CASE WHEN t.wswin = 'Y' THEN 1
+		ELSE 0 END AS is_wswin
+	FROM (
+		SELECT MAX(w) AS max_wins, yearid
+		FROM teams
+		GROUP BY yearid) AS nestsub
+	INNER JOIN teams AS t 
+	ON t.yearid = nestsub.yearid AND t.w = nestsub.max_wins
+	WHERE t.yearid BETWEEN 1970 AND 2016) AS sub;
