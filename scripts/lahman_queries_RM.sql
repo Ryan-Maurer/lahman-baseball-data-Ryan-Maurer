@@ -185,5 +185,31 @@ LIMIT 5;
 and the American League (AL)? Give their full name and the teams that they were managing 
 when they won the award.
 Answer:												*/
-SELECT *
-FROM awardsmanagers
+
+SELECT awdmgrs.playerid,ppl.namelast,ppl.namefirst,awdmgrs.yearid,teamid,awdmgrs.lgid
+FROM awardsmanagers AS awdmgrs
+INNER JOIN (
+	SELECT am.playerid,namelast,namefirst
+	FROM awardsmanagers AS am
+	LEFT JOIN people AS p
+	ON am.playerid = p.playerid
+	LEFT JOIN managers AS m 
+	ON am.playerid = m.playerid AND m.yearid = am.yearid
+	WHERE awardid = 'TSN Manager of the Year'
+		AND am.lgid = 'AL' 
+INTERSECT
+SELECT am.playerid,namelast,namefirst
+	FROM awardsmanagers AS am
+	LEFT JOIN people AS p
+	ON am.playerid = p.playerid
+	LEFT JOIN managers AS m 
+	ON am.playerid = m.playerid AND m.yearid = am.yearid
+	WHERE awardid = 'TSN Manager of the Year'
+		AND am.lgid = 'NL' ) AS sub
+ON sub.playerid = awdmgrs.playerid 
+LEFT JOIN managers AS mgr
+ON mgr.playerid = awdmgrs.playerid AND mgr.yearid = awdmgrs.yearid
+LEFT JOIN people as ppl
+ON ppl.playerid = awdmgrs.playerid
+GROUP BY awdmgrs.playerid,ppl.namelast,ppl.namefirst,awdmgrs.yearid,teamid,awdmgrs.lgid
+;
