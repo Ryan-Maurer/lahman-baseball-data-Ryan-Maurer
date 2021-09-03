@@ -6,7 +6,7 @@ FROM appearances;
 /*Q2:Find the name and height of the shortest player in the database. 
 	How many games did he play in? What is the name of the team for which he played?*/
 --Answer: Edward Carl Gaedel.  Played 1 game for SLA in 1951
-WITH ref AS(
+	WITH ref AS(
 	SELECT p.playerid,namegiven,namelast,height,teamid,g_all,yearid,
 	ROW_NUMBER() OVER(ORDER BY height) AS height_rank
 	FROM people AS p
@@ -20,9 +20,12 @@ Create a list showing each player’s first and last names as well as the
 total salary they earned in the major leagues.
 Sort this list in descending order by the total salary earned.
 Which Vanderbilt player earned the most money in the majors?
-Answer:	David Taylor ($245,553,888)													*/
-WITH ref AS(
-	SELECT p.playerid AS playerid_1,namelast,namefirst,salary,namegiven,sch.schoolid
+Answer:	David Price ($81,851,296)													*/
+WITH cte AS(
+	SELECT p.playerid ,CONCAT(namelast,',',' ',namefirst) AS full_name,
+	CASE WHEN salary IS NULL THEN 0.00
+	ELSE salary END AS salary_corr
+	,sch.schoolid,sal.yearid
 	FROM people AS p
 	LEFT JOIN collegeplaying AS cp
 	ON cp.playerid = p.playerid
@@ -30,12 +33,12 @@ WITH ref AS(
 	ON sch.schoolid = cp.schoolid
 	LEFT JOIN salaries AS sal
 	ON sal.playerid = p.playerid
-	WHERE sch.schoolid = 'vandy'
-		AND salary IS NOT NULL)
-SELECT namegiven,SUM(salary) AS total_salary,schoolid
-FROM ref
-GROUP BY namegiven,schoolid
+	WHERE sch.schoolid = 'vandy')
+SELECT full_name,SUM(DISTINCT salary_corr) AS total_salary
+FROM cte
+GROUP BY full_name,schoolid
 ORDER BY total_salary DESC;
+
 /* Q4:Using the fielding table, group players into three groups based on their position: 
 label players with position OF as "Outfield",
 those with position "SS", "1B", "2B", and "3B" as "Infield", 
@@ -59,6 +62,7 @@ SELECT
 FROM fielding
 WHERE yearid = 2016
 GROUP BY position;
+
 /* Q5:Find the average number of strikeouts per game by decade since 1920. 
 Round the numbers you report to 2 decimal places. 
 Do the same for home runs per game. Do you see any trends?
@@ -94,17 +98,19 @@ ORDER BY decade DESC;
 	where success is measured as the percentage of stolen base attempts which are successful.
 	(A stolen base attempt results either in a stolen base or being caught stealing.) 
 	Consider only players who attempted at least 20 stolen bases.
-Answer:	Christoper Scott													*/
+Answer:	Technically Chris Owings, but Billy Hamilton's percentage is close
+and has over double the attempts			*/
 WITH success_perc AS(
 	SELECT playerid,yearid,sb,cs,(sb-cs) AS stolen_success
 	FROM batting) 
-SELECT sp.playerid,namegiven,(stolen_success::float / sb::float)*100 AS perc_success
+SELECT sp.playerid,namelast,namefirst,
+(stolen_success::float / sb::float)*100 AS perc_success,
+sb
 FROM success_perc AS sp
 LEFT JOIN people AS p
 ON p.playerid = sp.playerid
 WHERE sb >= 20
-and YEARID = 2016
-	AND stolen_success IS NOT NULL
+and yearid = 2016
 ORDER BY (stolen_success::float / sb::float)*100  DESC;
 /* Q7:From 1970 – 2016, what is the largest number of wins for a team that did not win the world series?
 What is the smallest number of wins for a team that did win the world series? 
@@ -113,21 +119,31 @@ determine why this is the case. Then redo your query, excluding the problem year
 How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? 
 What percentage of the time?
 Answer:
-	7A:	114 Wins for the 1998 New York Yankees
+	7A:	116 Wins for the 2001 Seattle Mariners
 	7B: After exclusion of 1981 season due to player strike,
 		2006 St.Louis Cardinals won with 83 wins
 	7C:	between 1970 and 2016 12 (22.64%)teams who have had the most wins went on to win the world series															*/
-WITH ref AS(
+WITH ref AS(					--team that did not win
 	SELECT teamid,name,g,w,l,wswin,yearid
 	FROM teams
-	WHERE wswin = 'Y'
+	WHERE wswin = 'N'
 		AND yearid BETWEEN 1970 AND 2016
 	ORDER BY yearid DESC)
 SELECT MAX(w) AS wins,name,yearid
 FROM ref
 GROUP BY name,yearid
-ORDER BY wins ;
+ORDER BY wins DESC;
 
+WITH ref AS(					--team that did  win
+	SELECT teamid,name,g,w,l,wswin,yearid
+	FROM teams
+	WHERE wswin = 'Y'
+		AND yearid BETWEEN 1970 AND 2016
+	ORDER BY yearid DESC)
+SELECT MIN(w) AS wins,name,yearid
+FROM ref
+GROUP BY name,yearid
+ORDER BY wins ;
 --Q7 Second Part
 SELECT (SUM(is_wswin::float)/COUNT(*))* 100 AS perc
 FROM(
@@ -186,7 +202,8 @@ and the American League (AL)? Give their full name and the teams that they were 
 when they won the award.
 Answer:												*/
 
-SELECT awdmgrs.playerid,ppl.namelast,ppl.namefirst,awdmgrs.yearid,teamid,awdmgrs.lgid
+SELECT CONCAT(ppl.namelast,',',' ',ppl.namefirst) as name_full,
+	awdmgrs.yearid,teamid,awdmgrs.lgid
 FROM awardsmanagers AS awdmgrs
 INNER JOIN (
 	SELECT am.playerid,namelast,namefirst
@@ -213,3 +230,46 @@ LEFT JOIN people as ppl
 ON ppl.playerid = awdmgrs.playerid
 GROUP BY awdmgrs.playerid,ppl.namelast,ppl.namefirst,awdmgrs.yearid,teamid,awdmgrs.lgid
 ;
+--open ended questions
+/* Q13:It is thought that since left-handed pitchers are more rare,
+causing batters to face them less often, that they are more effective. 
+Investigate this claim and present evidence to either support or dispute this claim.
+First, determine just how rare left-handed pitchers are compared with right-handed pitchers.
+Are left-handed pitchers more likely to win the Cy Young Award?
+Are they more likely to make it into the hall of fame?
+
+Answer:	Approximately 20% of all pitchers are left handed.  Since approximately 33% of a Cy Young
+Winners are left handed (13% more than the avg number of left handed pitchers)
+they have a greater relative chance of winning the Cy Young Award.*/
+
+WITH cte AS(			--creates table excluding nulls for reference
+	SELECT playerid,throws
+		FROM people
+		WHERE throws IS NOT NULL)
+SELECT (SUM(is_left::float) / COUNT(*))*100 AS perc_left	--calculates percent left handed winning cy young
+FROM(
+SELECT cte.playerid, 			--quantifies 'throws' field so calculations can be made on it
+	CASE WHEN cte.throws = 'R' THEN 0
+	WHEN  cte.throws = 'L' THEN 1
+	ELSE 0 END AS is_left				
+FROM cte
+LEFT JOIN people AS ppl
+ON cte.playerid = ppl.playerid) AS sub
+;
+--how likely are left handed pitchers to win cy young award
+WITH people_clean AS(			--creates table excluding nulls for reference
+	SELECT playerid,throws
+		FROM people
+		WHERE throws IS NOT NULL)		
+SELECT (SUM(is_left::float) / COUNT(*))*100 AS perc_left_awd
+FROM awardsplayers AS ap
+INNER JOIN (
+	SELECT pitch.playerid,
+	CASE WHEN throws = 'L' THEN 1
+	ELSE 0 END AS is_left
+	FROM pitching AS pitch
+	LEFT JOIN people_clean AS cte
+	ON pitch.playerid = cte.playerid
+	GROUP BY pitch.playerid,cte.throws) AS leftpitchers
+ON ap.playerid = leftpitchers.playerid
+WHERE awardid = 'Cy Young Award';
