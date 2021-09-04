@@ -58,7 +58,7 @@ SELECT
 	WHEN pos = 'P'	OR
 		 pos = 'C'		THEN 'Battery'
 	ELSE 'NA' END AS position,
-	SUM(innouts)
+	SUM(PO)
 FROM fielding
 WHERE yearid = 2016
 GROUP BY position;
@@ -99,7 +99,7 @@ ORDER BY decade DESC;
 	(A stolen base attempt results either in a stolen base or being caught stealing.) 
 	Consider only players who attempted at least 20 stolen bases.
 Answer:	Technically Chris Owings, but Billy Hamilton's percentage is close
-and has over double the attempts			*/
+and has nearly triple double the attempts			*/
 WITH success_perc AS(
 	SELECT playerid,yearid,sb,cs,(sb-cs) AS stolen_success
 	FROM batting) 
@@ -122,7 +122,7 @@ Answer:
 	7A:	116 Wins for the 2001 Seattle Mariners
 	7B: After exclusion of 1981 season due to player strike,
 		2006 St.Louis Cardinals won with 83 wins
-	7C:	between 1970 and 2016 12 (22.64%)teams who have had the most wins went on to win the world series															*/
+	7C:--between 1970 and 2016 12 (22.64%)teams who have had the most wins went on to win the world series															*/
 WITH ref AS(					--team that did not win
 	SELECT teamid,name,g,w,l,wswin,yearid
 	FROM teams
@@ -156,7 +156,8 @@ FROM(
 		GROUP BY yearid) AS nestsub
 	INNER JOIN teams AS t 
 	ON t.yearid = nestsub.yearid AND t.w = nestsub.max_wins
-	WHERE t.yearid BETWEEN 1970 AND 2016) AS sub;
+	WHERE t.yearid BETWEEN 1970 AND 2016
+	AND t.yearid <> 1981) AS sub;
 
 /* Q8:Using the attendance figures from the homegames table, 
 find the teams and parks which had the top 5 average attendance per game in 2016 
@@ -179,22 +180,34 @@ BOTTOM 5
 "MIA"	"Marlins Park"						21405
 "CHA"	"U.S. Cellular Field"				21559	*/
 														
-SELECT team,park_name,(attendance/games) AS avg_attendance  -- top stadiums
+SELECT DISTINCT name,park_name,
+(hg.attendance/games) AS avg_attendance	   --top stadiums
 FROM homegames AS hg
 LEFT JOIN parks AS p
 ON hg.park = p.park
+LEFT JOIN (
+	SELECT *
+	FROM teams
+	WHERE yearid = 2016) AS t
+ON hg.team = t.teamid
 WHERE year = 2016
 	AND games >= 10
-ORDER BY attendance/games DESC
+ORDER BY hg.attendance/games  DESC
 LIMIT 5;
 
-SELECT team,park_name,(attendance/games) AS avg_attendance	   --bottom stadiums
+SELECT DISTINCT name,park_name,
+(hg.attendance/games) AS avg_attendance	   --bottom stadiums
 FROM homegames AS hg
 LEFT JOIN parks AS p
 ON hg.park = p.park
+LEFT JOIN (
+	SELECT *
+	FROM teams
+	WHERE yearid = 2016) AS t
+ON hg.team = t.teamid
 WHERE year = 2016
 	AND games >= 10
-ORDER BY attendance/games 
+ORDER BY hg.attendance/games 
 LIMIT 5;
 
 /* Q9:Which managers have won the TSN Manager of the Year award in both the National League (NL)
@@ -231,6 +244,49 @@ ON ppl.playerid = awdmgrs.playerid
 GROUP BY awdmgrs.playerid,ppl.namelast,ppl.namefirst,awdmgrs.yearid,teamid,awdmgrs.lgid
 ;
 --open ended questions
+
+/* Q12:In this question, you will explore the connection between number of wins and attendance.
+Does there appear to be any correlation between attendance at home games and number of wins?
+Do teams that win the world series see a boost in attendance the following year?
+What about teams that made the playoffs? 
+Making the playoffs means either being a division winner or a wild card winner. */
+	SELECT name,ROUND(AVG(attendance),2) AS avg_attendance,SUM(w) AS sum_wins
+	FROM teams
+	WHERE yearid >= 2000
+	GROUP BY name
+	ORDER BY AVG(attendance) DESC;	
+	--Do teams that win the world series see a boost in attendance the following year?
+WITH cte AS (
+	SELECT yearid,teamid,atn_after_wsw,attendance,(atn_after_wsw-attendance) AS attendance_diff,
+	wswin
+FROM (
+	SELECT yearid,teamid,
+		CASE WHEN wswin = 'N' THEN 0
+	ELSE LEAD (attendance,1,0) OVER(PARTITION BY teamid ORDER BY yearid) END AS atn_after_wsw,
+		attendance,wswin
+	FROM
+	teams) AS sub)
+SELECT ROUND(AVG(attendance_diff),2) AS atn_after_wswin
+FROM cte
+WHERE atn_after_wsw > 0
+	AND wswin IS NOT NULL
+;
+
+WITH cte AS (
+	SELECT yearid,teamid,atn_after_playoff,attendance,
+			(atn_after_playoff-attendance) AS attendance_diff,divwin,wcwin
+
+FROM (
+	SELECT yearid,teamid,
+		CASE WHEN divwin = 'Y' OR wcwin = 'Y'THEN LEAD (attendance,1,0) OVER(PARTITION BY teamid ORDER BY yearid)
+		ELSE 0 END AS atn_after_playoff,
+		attendance,divwin,wcwin
+	FROM
+	teams) AS sub)
+SELECT ROUND(AVG(attendance_diff),2) AS atn_after_playoff
+FROM cte
+WHERE atn_after_playoff> 0
+;
 /* Q13:It is thought that since left-handed pitchers are more rare,
 causing batters to face them less often, that they are more effective. 
 Investigate this claim and present evidence to either support or dispute this claim.
@@ -240,36 +296,77 @@ Are they more likely to make it into the hall of fame?
 
 Answer:	Approximately 20% of all pitchers are left handed.  Since approximately 33% of a Cy Young
 Winners are left handed (13% more than the avg number of left handed pitchers)
-they have a greater relative chance of winning the Cy Young Award.*/
+they have a greater relative chance of winning the Cy Young Award.
+With a makeup of approximately 28% of the pitchers in the hall of fame*/
 
 WITH cte AS(			--creates table excluding nulls for reference
 	SELECT playerid,throws
 		FROM people
 		WHERE throws IS NOT NULL)
-SELECT (SUM(is_left::float) / COUNT(*))*100 AS perc_left	--calculates percent left handed winning cy young
+SELECT (SUM(is_left::float) / COUNT(*))*100 AS perc_left	
 FROM(
 SELECT cte.playerid, 			--quantifies 'throws' field so calculations can be made on it
 	CASE WHEN cte.throws = 'R' THEN 0
 	WHEN  cte.throws = 'L' THEN 1
-	ELSE 0 END AS is_left				
+	ELSE 0 END AS is_left		--creates 'is_left' to specify number of left handed pitchers		
 FROM cte
-LEFT JOIN people AS ppl
+INNER JOIN people AS ppl
 ON cte.playerid = ppl.playerid) AS sub
 ;
 --how likely are left handed pitchers to win cy young award
 WITH people_clean AS(			--creates table excluding nulls for reference
 	SELECT playerid,throws
 		FROM people
-		WHERE throws IS NOT NULL)		
-SELECT (SUM(is_left::float) / COUNT(*))*100 AS perc_left_awd
+		WHERE throws IS NOT NULL)
+SELECT (SUM(is_left::float) / COUNT(*))*100 AS perc_left_awd,
+		(SUM(is_right::float) / COUNT(*))*100 AS perc_right_awd
 FROM awardsplayers AS ap
-INNER JOIN (
+INNER JOIN (			--inner joining pitching table to get list of pitchers
 	SELECT pitch.playerid,
-	CASE WHEN throws = 'L' THEN 1
+	CASE WHEN throws = 'L' THEN 1	--adding column 'is_left' onto pitching table
 	ELSE 0 END AS is_left
 	FROM pitching AS pitch
 	LEFT JOIN people_clean AS cte
 	ON pitch.playerid = cte.playerid
 	GROUP BY pitch.playerid,cte.throws) AS leftpitchers
 ON ap.playerid = leftpitchers.playerid
-WHERE awardid = 'Cy Young Award';
+LEFT JOIN(		--left joining 'is_right' column on to pitching table
+	SELECT pitch.playerid,
+	CASE WHEN throws = 'R' THEN 1
+	ELSE 0 END AS is_right
+	FROM pitching AS pitch
+	LEFT JOIN people_clean AS cte
+	ON pitch.playerid = cte.playerid
+	GROUP BY pitch.playerid,cte.throws) AS rightpitchers
+ON ap.playerid = rightpitchers.playerid
+WHERE awardid = 'Cy Young Award';		--specifying award type
+
+--how likely are left handed pitchers to make it into the hall of fame
+--presuming that this is out of all pitchers in hof and not players 
+WITH cte AS(			
+	SELECT playerid,throws
+		FROM people
+		WHERE throws IS NOT NULL)
+SELECT (SUM(is_left::float) / COUNT(*))*100 AS perc_left_hof,
+		(SUM(is_right::float) / COUNT(*))*100 AS perc_right_hof
+FROM halloffame AS hof
+INNER JOIN (			--inner joining list of 9,302 pitchers (excluding nulls) onto people (cte)
+	SELECT pitch.playerid,
+	CASE WHEN throws = 'L' THEN 1	--only including left handed pitchers for this join
+	ELSE 0 END AS is_left
+	FROM pitching AS pitch
+	LEFT JOIN cte
+	ON pitch.playerid = cte.playerid
+	GROUP BY pitch.playerid,cte.throws) AS leftpitchers
+ON hof.playerid = leftpitchers.playerid
+LEFT JOIN(				--add is_right handed on to pitchers table
+	SELECT pitch.playerid,
+	CASE WHEN throws = 'R' THEN 1
+	ELSE 0 END AS is_right
+	FROM pitching AS pitch
+	LEFT JOIN cte
+	ON pitch.playerid = cte.playerid
+	GROUP BY pitch.playerid,cte.throws) AS rightpitchers
+ON hof.playerid = rightpitchers.playerid
+;
+
